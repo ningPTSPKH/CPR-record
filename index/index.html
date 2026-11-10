@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AHA ALS CPR Event Logger</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Prompt', sans-serif; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Top Navigation / Header -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between no-print">
+        <div class="flex items-center space-x-3">
+            <div class="bg-red-600 text-white font-bold p-2 rounded-lg shadow-lg animate-pulse">AHA ALS</div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide">CPR Event Logger</h1>
+                <p class="text-xs text-slate-400">Standardized Resuscitation & Time Management</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="metronomeToggleBtn" onclick="toggleMetronome()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-slate-700 transition flex items-center space-x-1">
+                <span>🔊 Metronome: <span id="metronomeState" class="text-red-400 font-semibold">OFF</span></span>
+            </button>
+            <button onclick="finishCPR()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow transition">
+                🏁 Finish CPR / ROSC
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Left & Center: Timers and Main Actions (2 Columns on large screens) -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Master Timers Dashboard Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <!-- Total Time -->
+                <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                    <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Total Elapsed Time</span>
+                    <div id="totalTimerDisplay" class="text-3xl font-bold text-cyan-400 mt-1 font-mono">00:00</div>
+                </div>
+                <!-- Active CPR Time -->
+                <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                    <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Active CPR Time</span>
+                    <div id="cprTimerDisplay" class="text-3xl font-bold text-emerald-400 mt-1 font-mono">00:00</div>
+                </div>
+                <!-- CCF % -->
+                <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 flex flex-col justify-center items-center">
+                    <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Compression Fraction</span>
+                    <div class="flex items-baseline space-x-1 mt-1">
+                        <span id="ccfDisplay" class="text-3xl font-bold text-amber-400 font-mono">100</span>
+                        <span class="text-amber-400 font-bold">%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cycle & Epinephrine Timer Status Bar -->
+            <div id="cycleStatusCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 transition-all">
+                <div class="flex items-center space-x-3">
+                    <div id="cycleIndicatorDot" class="w-4 h-4 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <div>
+                        <h3 id="cycleTitle" class="text-sm font-semibold text-slate-200">รอบการปั๊มหัวใจ (2 นาที)</h3>
+                        <p id="cycleSub" class="text-xs text-slate-400">กำลังปั๊มต่อเนื่อง - เตรียมสลับคนปั๊มเมื่อครบกำหนด</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right">
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider block">รอบถัดไป (2 นาที)</span>
+                        <span id="cycleTimerDisplay" class="text-xl font-mono font-bold text-cyan-300">02:00</span>
+                    </div>
+                    <div class="border-l border-slate-800 pl-4 text-right">
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Epi Due (3 นาที)</span>
+                        <span id="epiTimerDisplay" class="text-xl font-mono font-bold text-purple-400">03:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Core Action Control Pad -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2">แผงควบคุมหลัก (Core Resuscitation Actions)</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Pause / Resume CPR Button -->
+                    <button id="pauseResumeBtn" onclick="togglePauseCPR()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 text-lg">
+                        <span id="pauseBtnIcon">⏸️</span>
+                        <span id="pauseBtnText">หยุดปั๊มชั่วคราว (Pause CPR)</span>
+                    </button>
+
+                    <!-- Shock Button -->
+                    <button onclick="recordShock()" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 text-lg">
+                        <span>⚡</span>
+                        <span>บันทึกการช็อกไฟฟ้า (Shock)</span>
+                    </button>
+                </div>
+
+                <!-- Intubation & Airway Actions -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <button onclick="openIntubationModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2">
+                        <span>🫁</span>
+                        <span>จัดการใส่ท่อช่วยหายใจ (Intubation)</span>
+                    </button>
+                    <button onclick="recordMedication('Epinephrine 1mg')" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2">
+                        <span>💉</span>
+                        <span>ให้ยา Epinephrine 1mg</span>
+                    </button>
+                </div>
+
+                <!-- Other Common Emergency Medications -->
+                <div class="pt-2">
+                    <span class="text-xs text-slate-400 block mb-2 font-medium">บันทึกยาฉุกเฉินอื่นๆ:</span>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="recordMedication('Amiodarone 300mg')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2.5 px-3 rounded-lg border border-slate-700 transition">Amiodarone 300mg</button>
+                        <button onclick="recordMedication('Amiodarone 150mg')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2.5 px-3 rounded-lg border border-slate-700 transition">Amiodarone 150mg</button>
+                        <button onclick="recordMedication('Atropine 1mg')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2.5 px-3 rounded-lg border border-slate-700 transition">Atropine 1mg</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Real-time Event Log Timeline -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-[650px] lg:h-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">ประวัติเหตุการณ์ (Event Timeline)</h2>
+                <span id="logCountBadge" class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">0 เหตุการณ์</span>
+            </div>
+            
+            <!-- Timeline Scrollable Box -->
+            <div id="eventTimelineList" class="flex-1 overflow-y-auto space-y-3 pr-1 text-sm custom-scroll">
+                <!-- Log items injected dynamically -->
+                <div class="text-center text-slate-500 py-10 text-xs">
+                    เริ่มบันทึกเหตุการณ์กู้ชีพ... ระบบพร้อมทำงาน
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal 1: 10-Second Pulse Check (Auto triggered every 2 mins) -->
+    <div id="pulseCheckModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center space-y-5 animate-scaleIn">
+            <div class="w-16 h-16 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-amber-500/40 animate-pulse">
+                ⏱️
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-slate-100">ครบกำหนด 2 นาที (Pulse & Rhythm Check)</h2>
+                <p class="text-xs text-slate-400 mt-1">กรุณาหยุดปั๊มชั่วคราวเพื่อตรวจคลื่นไฟฟ้าหัวใจและคลำชีพจร (ไม่เกิน 10 วินาที) พร้อมเปลี่ยนผู้ปั๊มหัวใจ</p>
+            </div>
+            <div id="pulseCountdownDisplay" class="text-5xl font-mono font-bold text-amber-400">10</div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="resumeCPRFromPulseCheck()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl shadow transition">
+                    ▶️ เริ่มปั๊มต่อทันที
+                </button>
+                <button onclick="recordShockFromPulseCheck()" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-xl shadow transition">
+                    ⚡ ช็อกไฟฟ้า (Shock)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Intubation Active Stopwatch Modal -->
+    <div id="intubationModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center space-y-5">
+            <div class="w-16 h-16 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-indigo-500/40">
+                🫁
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-slate-100">กำลังใส่ท่อช่วยหายใจ (Intubation)</h2>
+                <p class="text-xs text-slate-400 mt-1">ระบบได้หยุดเวลาปั๊มหัวใจชั่วคราวแล้ว (Active CPR Paused) กรุณาจำกัดเวลาไม่ให้เกิน 15 วินาที</p>
+            </div>
+            <!-- Intubation Live Stopwatch -->
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <span class="text-xs text-slate-400 block uppercase tracking-wider">ระยะเวลาในการใส่ท่อ</span>
+                <div id="intubationStopwatch" class="text-4xl font-mono font-bold text-indigo-400 mt-1">00:00</div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="completeIntubation('Success')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl shadow transition">
+                    ✅ ใส่ท่อสำเร็จ (Success)
+                </button>
+                <button onclick="completeIntubation('Fail')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-xl shadow transition">
+                    ❌ ใส่ท่อไม่สำเร็จ (Fail)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Summary Report (Finish CPR / ROSC) -->
+    <div id="summaryModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden overflow-y-auto">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 md:p-8 shadow-2xl space-y-6 my-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-100">รายงานสรุปผลการกู้ชีพ (Resuscitation Summary)</h2>
+                    <p class="text-xs text-slate-400 mt-0.5">มาตรฐานตามแนวทางสมาคมโรคหัวใจอเมริกัน (AHA ALS 2025)</p>
+                </div>
+                <button onclick="closeSummaryModal()" class="text-slate-400 hover:text-white text-xl font-bold no-print">✕</button>
+            </div>
+
+            <!-- Summary KPI Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 block">เวลารวมทั้งหมด</span>
+                    <span id="sumTotalTime" class="text-xl font-bold text-cyan-400 font-mono">00:00</span>
+                </div>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 block">เวลาปั๊มสะสม</span>
+                    <span id="sumCprTime" class="text-xl font-bold text-emerald-400 font-mono">00:00</span>
+                </div>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 block">% Compression</span>
+                    <span id="sumCcf" class="text-xl font-bold text-amber-400 font-mono">0%</span>
+                </div>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 block">จำนวนการช็อกไฟฟ้า</span>
+                    <span id="sumShocks" class="text-xl font-bold text-red-400 font-mono">0 ครั้ง</span>
+                </div>
+            </div>
+
+            <!-- Detailed Section -->
+            <div class="space-y-4 text-sm">
+                <div>
+                    <h3 class="font-semibold text-slate-300 mb-2">📋 บันทึกเหตุการณ์และไทม์ไลน์ทั้งหมด (Timeline & System Logs)</h3>
+                    <div id="sumTimelineList" class="bg-slate-950 rounded-xl p-3 border border-slate-800 max-h-60 overflow-y-auto space-y-2 text-xs font-mono">
+                        <!-- Injected summary logs -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800 no-print">
+                <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 px-5 rounded-xl border border-slate-700 transition flex items-center space-x-2">
+                    <span>🖨️</span>
+                    <span>พิมพ์รายงาน / บันทึก PDF</span>
+                </button>
+                <button onclick="location.reload()" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-5 rounded-xl transition">
+                    🔄 เริ่มเคสใหม่ (Reset)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Global State Variables
+        let totalSeconds = 0;
+        let cprSeconds = 0;
+        let cycleSeconds = 120; // 2 minutes cycle
+        let epiSeconds = 180;  // 3 minutes epinephrine timer
+        let isRunning = true;
+        let isCprPaused = false;
+        
+        let timerInterval = null;
+        let intubationInterval = null;
+        let intubationSeconds = 0;
+
+        let pulseCheckInterval = null;
+        let pulseCheckSeconds = 10;
+
+        let shockCount = 0;
+        let logs = [];
+
+        let metronomeActive = false;
+        let audioCtx = null;
+        let metronomeTimer = null;
+
+        // Initialize App on Load
+        window.onload = function() {
+            logEvent("SYSTEM", "เริ่มเข้าสู่เคส / เริ่มต้นจับเวลากู้ชีพ (Total & CPR Timer Active)");
+            startMasterTimers();
+        };
+
+        // Master Timer Loop (Runs every 1 second)
+        function startMasterTimers() {
+            timerInterval = setInterval(() => {
+                if (!isRunning) return;
+
+                // Total Time always ticks
+                totalSeconds++;
+                document.getElementById('totalTimerDisplay').textContent = formatTime(totalSeconds);
+
+                // Active CPR Time ticks only when CPR is not paused
+                if (!isCprPaused) {
+                    cprSeconds++;
+                    document.getElementById('cprTimerDisplay').textContent = formatTime(cprSeconds);
+
+                    // 2-Minute Cycle countdown
+                    if (cycleSeconds > 0) {
+                        cycleSeconds--;
+                        document.getElementById('cycleTimerDisplay').textContent = formatTime(cycleSeconds);
+
+                        // 15-sec warning
+                        if (cycleSeconds === 15) {
+                            playBeep(440, 200);
+                            logEvent("SYSTEM", "⚠️ แจ้งเตือน: เหลือเวลาอีก 15 วินาทีก่อนครบครอบ 2 นาที (เตรียมสลับคนปั๊ม)");
+                            document.getElementById('cycleStatusCard').classList.add('border-amber-500', 'bg-amber-950/20');
+                        }
+                    } else {
+                        // Trigger 2-Minute Pulse Check Modal
+                        triggerPulseCheckModal();
+                    }
+                }
+
+                // Epinephrine countdown (3 minutes)
+                if (epiSeconds > 0) {
+                    epiSeconds--;
+                    document.getElementById('epiTimerDisplay').textContent = formatTime(epiSeconds);
+                    if (epiSeconds === 0) {
+                        playBeep(880, 500);
+                        logEvent("SYSTEM", "💉 ครบกำหนดเวลาให้ยา Epinephrine รอบถัดไป!");
+                    }
+                }
+
+                // Update CCF %
+                updateCCF();
+
+            }, 1000);
+        }
+
+        // Format Seconds to MM:SS
+        function formatTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // Update Compression Fraction (CCF)
+        function updateCCF() {
+            if (totalSeconds === 0) return;
+            const ccf = Math.round((cprSeconds / totalSeconds) * 100);
+            const disp = document.getElementById('ccfDisplay');
+            disp.textContent = ccf;
+            if (ccf >= 80) {
+                disp.className = "text-3xl font-bold text-emerald-400 font-mono";
+            } else {
+                disp.className = "text-3xl font-bold text-amber-400 font-mono";
+            }
+        }
+
+        // Toggle Pause / Resume CPR
+        function togglePauseCPR() {
+            isCprPaused = !isCprPaused;
+            const btn = document.getElementById('pauseResumeBtn');
+            const icon = document.getElementById('pauseBtnIcon');
+            const text = document.getElementById('pauseBtnText');
+
+            if (isCprPaused) {
+                btn.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 text-lg";
+                icon.textContent = "▶️";
+                text.textContent = "เริ่มปั๊มหัวใจต่อ (Resume CPR)";
+                logEvent("ACTION", "⏸️ หยุดปั๊มหัวใจชั่วคราว (Pause CPR)");
+            } else {
+                btn.className = "w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 text-lg";
+                icon.textContent = "⏸️";
+                text.textContent = "หยุดปั๊มชั่วคราว (Pause CPR)";
+                logEvent("ACTION", "▶️ กลับมาปั๊มหัวใจต่อ (Resume CPR)");
+            }
+        }
+
+        // Trigger 2-Minute Pulse Check Modal
+        function triggerPulseCheckModal() {
+            isCprPaused = true;
+            document.getElementById('cycleStatusCard').classList.remove('border-amber-500', 'bg-amber-950/20');
+            document.getElementById('pulseCheckModal').classList.remove('hidden');
+            playBeep(600, 400);
+            logEvent("SYSTEM", "⏰ ครบรอบ 2 นาที: ระบบหยุดปั๊มอัตโนมัติเพื่อตรวจชีพจรและประเมิน Rhythm");
+
+            pulseCheckSeconds = 10;
+            document.getElementById('pulseCountdownDisplay').textContent = pulseCheckSeconds;
+
+            pulseCheckInterval = setInterval(() => {
+                pulseCheckSeconds--;
+                document.getElementById('pulseCountdownDisplay').textContent = pulseCheckSeconds;
+                if (pulseCheckSeconds <= 0) {
+                    clearInterval(pulseCheckInterval);
+                }
+            }, 1000);
+        }
+
+        function resumeCPRFromPulseCheck() {
+            clearInterval(pulseCheckInterval);
+            document.getElementById('pulseCheckModal').classList.add('hidden');
+            cycleSeconds = 120; // reset 2 min cycle
+            isCprPaused = false;
+            logEvent("ACTION", "🔄 เปลี่ยนผู้ปั๊มหัวใจเรียบร้อย -> เริ่มปั๊มรอบใหม่");
+        }
+
+        function recordShockFromPulseCheck() {
+            clearInterval(pulseCheckInterval);
+            document.getElementById('pulseCheckModal').classList.add('hidden');
+            recordShock();
+            cycleSeconds = 120;
+            isCprPaused = false;
+        }
+
+        // Record Shock
+        function recordShock() {
+            shockCount++;
+            playBeep(900, 300);
+            logEvent("SHOCK", `⚡ บันทึกการช็อกไฟฟ้าครั้งที่ ${shockCount}`);
+        }
+
+        // Intubation Flow
+        function openIntubationModal() {
+            isCprPaused = true; // Pause CPR during intubation
+            document.getElementById('intubationModal').classList.remove('hidden');
+            intubationSeconds = 0;
+            document.getElementById('intubationStopwatch').textContent = "00:00";
+            logEvent("ACTION", "🫁 เริ่มกระบวนการใส่ท่อช่วยหายใจ (หยุดปั๊มชั่วคราว)");
+
+            intubationInterval = setInterval(() => {
+                intubationSeconds++;
+                document.getElementById('intubationStopwatch').textContent = formatTime(intubationSeconds);
+                if (intubationSeconds === 15) {
+                    playBeep(500, 200);
+                }
+            }, 1000);
+        }
+
+        function completeIntubation(result) {
+            clearInterval(intubationInterval);
+            document.getElementById('intubationModal').classList.add('hidden');
+            isCprPaused = false; // Resume CPR automatically
+            
+            const resultText = result === 'Success' ? '✅ สำเร็จ (Success)' : '❌ ไม่สำเร็จ (Fail)';
+            logEvent("INTUBATION", `🫁 ใส่ท่อช่วยหายใจเสร็จสิ้น [ผล: ${resultText}] (ใช้เวลา ${formatTime(intubationSeconds)})`);
+        }
+
+        // Record Medications
+        function recordMedication(medName) {
+            playBeep(700, 150);
+            if (medName.includes('Epinephrine')) {
+                epiSeconds = 180; // Reset Epi 3 min timer
+                document.getElementById('epiTimerDisplay').textContent = "03:00";
+            }
+            logEvent("MED", `💉 ให้ยา: ${medName}`);
+        }
+
+        // Event Logger Function
+        function logEvent(type, text) {
+            const timeStr = formatTime(totalSeconds);
+            logs.push({ time: timeStr, type: type, text: text });
+
+            const listEl = document.getElementById('eventTimelineList');
+            if (logs.length === 1) {
+                listEl.innerHTML = '';
+            }
+
+            let badgeColor = "bg-slate-800 text-slate-300 border-slate-700";
+            if (type === 'SHOCK') badgeColor = "bg-red-950 text-red-300 border-red-800";
+            else if (type === 'MED') badgeColor = "bg-purple-950 text-purple-300 border-purple-800";
+            else if (type === 'INTUBATION') badgeColor = "bg-indigo-950 text-indigo-300 border-indigo-800";
+            else if (type === 'SYSTEM') badgeColor = "bg-cyan-950 text-cyan-300 border-cyan-800";
+            else if (type === 'ACTION') badgeColor = "bg-amber-950 text-amber-300 border-amber-800";
+
+            const item = document.createElement('div');
+            item.className = "flex items-start space-x-3 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 animate-fadeIn";
+            item.innerHTML = `
+                <span class="font-mono text-xs text-cyan-400 font-bold mt-0.5">[${timeStr}]</span>
+                <div class="flex-1">
+                    <span class="inline-block text-[10px] px-2 py-0.5 rounded border ${badgeColor} font-semibold mb-1">${type}</span>
+                    <p class="text-slate-200 text-xs">${text}</p>
+                </div>
+            `;
+            listEl.prepend(item);
+            document.getElementById('logCountBadge').textContent = `${logs.length} เหตุการณ์`;
+        }
+
+        // Finish CPR / ROSC
+        function finishCPR() {
+            isRunning = false;
+            document.getElementById('sumTotalTime').textContent = formatTime(totalSeconds);
+            document.getElementById('sumCprTime').textContent = formatTime(cprSeconds);
+            document.getElementById('sumCcf').textContent = Math.round((cprSeconds / totalSeconds) * 100) + '%';
+            document.getElementById('sumShocks').textContent = shockCount + ' ครั้ง';
+
+            // Populate Summary Timeline
+            const sumList = document.getElementById('sumTimelineList');
+            sumList.innerHTML = '';
+            logs.forEach(log => {
+                const div = document.createElement('div');
+                div.className = "flex justify-between border-b border-slate-900 pb-1";
+                div.innerHTML = `<span class="text-cyan-400">[${log.time}]</span> <span class="text-slate-300">${log.text}</span>`;
+                sumList.appendChild(div);
+            });
+
+            document.getElementById('summaryModal').classList.remove('hidden');
+            logEvent("SYSTEM", "🏁 สิ้นสุดการกู้ชีพ (Finish CPR / ROSC)");
+        }
+
+        function closeSummaryModal() {
+            document.getElementById('summaryModal').classList.add('hidden');
+        }
+
+        // Audio Beep Generator
+        function playBeep(frequency = 440, duration = 150) {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = frequency;
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + (duration / 1000));
+            } catch (e) {
+                console.log("Audio not supported or blocked");
+            }
+        }
+
+        // Metronome (110 BPM)
+        function toggleMetronome() {
+            metronomeActive = !metronomeActive;
+            const stateEl = document.getElementById('metronomeState');
+            const btnEl = document.getElementById('metronomeToggleBtn');
+
+            if (metronomeActive) {
+                stateEl.textContent = "ON (110 BPM)";
+                stateEl.className = "text-emerald-400 font-semibold";
+                btnEl.classList.add('border-emerald-600');
+                
+                // 110 BPM = 60,000 / 110 ≈ 545 ms per beat
+                metronomeTimer = setInterval(() => {
+                    playBeep(1000, 50);
+                }, 545);
+            } else {
+                stateEl.textContent = "OFF";
+                stateEl.className = "text-red-400 font-semibold";
+                btnEl.classList.remove('border-emerald-600');
+                clearInterval(metronomeTimer);
+            }
+        }
+    </script>
+</body>
+</html>
